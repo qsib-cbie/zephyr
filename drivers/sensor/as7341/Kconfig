@@ -1,0 +1,24 @@
+# AS7341 spectral sensor configuration options
+
+menuconfig AS7341
+	bool "AS7341 sensor"
+	depends on I2C
+	help
+	  Enable driver for AS7341 I2C-based spectral sensor.
+
+if AS7341
+
+choice
+	prompt "AS7341 test mode"
+	default AS7341_TEST_OFF
+	help
+	  Select sampling mode. In normal mode continuous measurements are
+	  performed, whereas in forced mode only single measurement is performed.
+config AS7341_TEST_ON
+	bool "allow failures in test mode"
+config AS7341_TEST_OFF
+	bool "disallow all failures"
+endchoice
+
+
+endif # AS7341
