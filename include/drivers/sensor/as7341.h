@@ -45,16 +45,16 @@ static inline struct as7341_data *to_data(const struct device *dev) { return (st
 static inline const struct as7341_config *to_config(const struct device *dev) { return (const struct as7341_config*) dev->config; }
 
 typedef int (*as7341_reg_read_fn)(const struct device *dev, uint8_t start, uint8_t *buf, int size);
-typedef int (*as7341_reg_write_fn)(const struct device *dev, uint8_t reg, uint8_t val);
+typedef int (*as7341_reg_write_fn)(const struct device *dev, uint8_t start, uint8_t *buf, int size);
 
 struct as7341_reg_io {
 	as7341_reg_read_fn read;
 	as7341_reg_write_fn write;
 };
 
-static inline void as7341_setup_interrupt(struct as7341_data* drv_data, bool enable) {
+static inline int as7341_setup_interrupt(struct as7341_data* drv_data, bool enable) {
 	uint32_t flags = enable ? GPIO_INT_EDGE_TO_ACTIVE : GPIO_INT_DISABLE;
-	gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin, flags);
+	return gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin, flags);
 }
 
 void as7341_work_cb(struct k_work* work);

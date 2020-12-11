@@ -43,8 +43,13 @@ int as7341_trigger_set(const struct device *dev,
 			 sensor_trigger_handler_t handler)
 {
 	struct as7341_data *data = to_data(dev);
-	as7341_setup_interrupt(data, false);
+	int32_t rc;
+	if((rc = as7341_setup_interrupt(data, false)) < 0) {
+		LOG_ERR("Failed to setup interrupt as %d with %d", (int) false, (int) rc);
+		return rc;
+	}
 	if(trig == NULL || handler == NULL) {
+		LOG_WRN("Disabling interrupts due to NULL argument(s)");
 		return 0;
 	}
 
@@ -61,20 +66,35 @@ int as7341_trigger_set(const struct device *dev,
 			// 	return -EIO;
 			// }
 		} else {
-			return -ENOTSUP;
+			rc = -ENOTSUP;
+			goto done;
 		}
 		break;
 	default:
 		LOG_ERR("Unsupported sensor trigger");
-		return -ENOTSUP;
+		rc = -ENOTSUP;
+		goto done;
 	}
 
-	as7341_setup_interrupt(data, true);
-	if (gpio_pin_get(data->gpio, data->gpio_pin) > 0) {
+	rc = 0;
+
+done:
+
+	LOG_INF("Enabling interrupts for trigger");
+	int rc1;
+	if((rc1 = as7341_setup_interrupt(data, true)) < 0) {
+		LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc1);
+		return rc1;
+	}
+	if ((rc1 = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
+		LOG_DBG("Interrupt pin already active, submitting trigger handler work");
 		k_work_submit(&data->work);
+	} else if(rc1 < 0) {
+		LOG_ERR("Failed to check interrupt pin with %d", rc1);
+		return rc1;
 	}
 
-	return 0;
+	return rc;
 }
 
 void as7341_work_cb(struct k_work *work)
@@ -91,13 +111,22 @@ void as7341_work_cb(struct k_work *work)
 		LOG_WRN("Fired work handler without user registered handler");
 	}
 
-	as7341_setup_interrupt(data, true);
+	int32_t rc;
+	if((rc = as7341_setup_interrupt(data, true)) < 0) {
+		LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+	}
 }
 
 static void as7341_handle_cb(struct as7341_data* drv_data) {
-	as7341_setup_interrupt(drv_data, false);
+	int32_t rc;
+	if((rc = as7341_setup_interrupt(drv_data, false)) < 0) {
+		LOG_ERR("Failed to setup interrupt as %d with %d", (int) false, (int) rc);
+	}
 	if(k_work_pending(&drv_data->work)) {
 		LOG_ERR("Work is still pending");
+		if((rc = as7341_setup_interrupt(drv_data, true)) < 0) {
+			LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+		}
 		return;
 	}
 	k_work_init(&drv_data->work, as7341_work_cb);
@@ -120,8 +149,7 @@ static int as7341_sample_fetch(const struct device* dev, enum sensor_channel cha
 		return -ENOTSUP;
 	}
 
-	as7341_setup_interrupt(data, true);
-	return 0;
+	return as7341_setup_interrupt(data, true);
 }
 
 static int as7341_channel_get(const struct device* dev, enum sensor_channel chan, struct sensor_value * val) {
@@ -129,12 +157,30 @@ static int as7341_channel_get(const struct device* dev, enum sensor_channel chan
 }
 
 static int as7341_reg_read_i2c(const struct device *dev, uint8_t start, uint8_t *buf, int size) {
-	return i2c_burst_read(to_data(dev)->bus, to_config(dev)->i2c_addr,
-			      start, buf, size);
+	return i2c_burst_read(to_data(dev)->bus, to_config(dev)->i2c_addr, start, buf, size);
 }
 
-static int as7341_reg_write_i2c(const struct device *dev, uint8_t reg, uint8_t val) {
-	return i2c_reg_write_byte(to_data(dev)->bus, to_config(dev)->i2c_addr, reg, val);
+static int as7341_reg_write_i2c(const struct device *dev, uint8_t start, uint8_t *buf, int size) {
+	int rc;
+	if((rc = i2c_burst_write(to_data(dev)->bus, to_config(dev)->i2c_addr, start, buf, size)) < 0) {
+		LOG_ERR("Write failed for I2C addr %d, Reg %d with value %p of len %d", (int)to_config(dev)->i2c_addr,(int)start, buf, size);
+		return rc;
+	}
+	uint8_t rval[128];
+	if(size > 120) {
+		LOG_ERR("Can't check write success");
+		return 0;
+	}
+	if((rc = i2c_burst_read(to_data(dev)->bus, to_config(dev)->i2c_addr, start, rval, size)) < 0) {
+		LOG_ERR("Read-after-Write failed for I2C addr %d, Reg %d with value %p of len %d", (int)to_config(dev)->i2c_addr,(int)start, buf, size);
+		return rc;
+	}
+	for(size_t i = 0; i < size; i++) {
+		if(rval[i] != buf[i]) {
+			LOG_ERR("At i=%d, read %d after wrote %d", (int) i, (int) rval[i], (int) buf[i]);
+		}
+	}
+	return 0;
 }
 
 static const struct as7341_reg_io as7341_reg_io_i2c = {
@@ -151,6 +197,15 @@ static const struct sensor_driver_api as7341_api_funcs = {
 
 static int as7341_chip_init(const struct device *dev)
 {
+	// Chip says not to talk to it while it is initializing
+	/*
+	 * INT_BUSY
+	 * Indicates that the device is initializing.
+	 * This bit will remain 1 for about 300μs after power on.
+	 * Do not interact with the device until initialization is complete
+	 */
+	k_sleep(K_MSEC(1));
+
 	LOG_DBG("Checking chip part identification number");
 	int rc;
 	uint8_t id;
@@ -209,10 +264,16 @@ int as7341_init(const struct device *dev)
 		goto done;
 	}
 
-	as7341_setup_interrupt(data, true);
+	if((rc = as7341_setup_interrupt(data, true)) < 0) {
+		LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+		goto done;
+	}
 
-	if (gpio_pin_get(data->gpio, data->gpio_pin) > 0) {
+	if ((rc = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
+		LOG_DBG("Interrupt pin is already set after init");
 		as7341_handle_cb(data);
+	} else if(rc < 0) {
+		LOG_ERR("Failed to check interrupt pin on init");
 	}
 
 	rc = 0;
