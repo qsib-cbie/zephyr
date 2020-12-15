@@ -97,6 +97,8 @@ done:
 	return rc;
 }
 
+static void as7341_handle_cb(struct as7341_data* );
+
 void as7341_work_cb(struct k_work *work)
 {
 	struct as7341_data *data = CONTAINER_OF(work,
@@ -112,13 +114,23 @@ void as7341_work_cb(struct k_work *work)
 	}
 
 	int32_t rc;
-	if((rc = as7341_setup_interrupt(data, true)) < 0) {
-		LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+	if((rc = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
+		LOG_WRN("Interrupt ready again before re-enabling trigger");
+		as7341_handle_cb(data);
+	} else {
+		if(rc < 0) {
+			LOG_ERR("Failed to check interrupt pin with %d", rc);
+		}
+		LOG_DBG("Re-enabling interrupts for trigger");
+		if((rc = as7341_setup_interrupt(data, true)) < 0) {
+			LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+		}
 	}
 }
 
 static void as7341_handle_cb(struct as7341_data* drv_data) {
 	int32_t rc;
+	LOG_DBG("Disabling interrupts for trigger to handle current interrupt");
 	if((rc = as7341_setup_interrupt(drv_data, false)) < 0) {
 		LOG_ERR("Failed to setup interrupt as %d with %d", (int) false, (int) rc);
 	}
@@ -271,7 +283,7 @@ int as7341_init(const struct device *dev)
 
 	if ((rc = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
 		LOG_DBG("Interrupt pin is already set after init");
-		as7341_handle_cb(data);
+		// as7341_handle_cb(data);
 	} else if(rc < 0) {
 		LOG_ERR("Failed to check interrupt pin on init");
 	}
