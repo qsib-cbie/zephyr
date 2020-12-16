@@ -87,8 +87,8 @@ done:
 		return rc1;
 	}
 	if ((rc1 = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
-		LOG_DBG("Interrupt pin already active, submitting trigger handler work");
-		k_work_submit(&data->work);
+		LOG_DBG("Interrupt pin already active, skipping submitting trigger handler work");
+		// k_work_submit(&data->work);
 	} else if(rc1 < 0) {
 		LOG_ERR("Failed to check interrupt pin with %d", rc1);
 		return rc1;
@@ -107,7 +107,7 @@ void as7341_work_cb(struct k_work *work)
 	const struct device *dev = data->dev;
 
 	if (data->trigger_handler != NULL) {
-		LOG_DBG("Firing user registered work handler");
+		// LOG_DBG("Firing user registered work handler");
 		data->trigger_handler(dev, &data->trigger);
 	} else {
 		LOG_WRN("Fired work handler without user registered handler");
@@ -115,24 +115,28 @@ void as7341_work_cb(struct k_work *work)
 
 	int32_t rc;
 	if((rc = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
-		LOG_WRN("Interrupt ready again before re-enabling trigger");
+		// LOG_WRN("Interrupt ready again before re-enabling trigger");
 		as7341_handle_cb(data);
 	} else {
 		if(rc < 0) {
 			LOG_ERR("Failed to check interrupt pin with %d", rc);
 		}
-		LOG_DBG("Re-enabling interrupts for trigger");
-		if((rc = as7341_setup_interrupt(data, true)) < 0) {
-			LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+		if(!data->interrupt_enabled) {
+			LOG_DBG("Re-enabling interrupts for trigger");
+			if((rc = as7341_setup_interrupt(data, true)) < 0) {
+				LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
+			}
 		}
 	}
 }
 
 static void as7341_handle_cb(struct as7341_data* drv_data) {
 	int32_t rc;
-	LOG_DBG("Disabling interrupts for trigger to handle current interrupt");
-	if((rc = as7341_setup_interrupt(drv_data, false)) < 0) {
-		LOG_ERR("Failed to setup interrupt as %d with %d", (int) false, (int) rc);
+	if(drv_data->interrupt_enabled) {
+		LOG_DBG("Disabling interrupts for trigger to handle current interrupt");
+		if((rc = as7341_setup_interrupt(drv_data, false)) < 0) {
+			LOG_ERR("Failed to setup interrupt as %d with %d", (int) false, (int) rc);
+		}
 	}
 	if(k_work_pending(&drv_data->work)) {
 		LOG_ERR("Work is still pending");
@@ -178,20 +182,20 @@ static int as7341_reg_write_i2c(const struct device *dev, uint8_t start, uint8_t
 		LOG_ERR("Write failed for I2C addr %d, Reg %d with value %p of len %d", (int)to_config(dev)->i2c_addr,(int)start, buf, size);
 		return rc;
 	}
-	uint8_t rval[128];
-	if(size > 120) {
-		LOG_ERR("Can't check write success");
-		return 0;
-	}
-	if((rc = i2c_burst_read(to_data(dev)->bus, to_config(dev)->i2c_addr, start, rval, size)) < 0) {
-		LOG_ERR("Read-after-Write failed for I2C addr %d, Reg %d with value %p of len %d", (int)to_config(dev)->i2c_addr,(int)start, buf, size);
-		return rc;
-	}
-	for(size_t i = 0; i < size; i++) {
-		if(rval[i] != buf[i]) {
-			LOG_ERR("At i=%d, read %d after wrote %d", (int) i, (int) rval[i], (int) buf[i]);
-		}
-	}
+	// uint8_t rval[128];
+	// if(size > 120) {
+	// 	LOG_ERR("Can't check write success");
+	// 	return 0;
+	// }
+	// if((rc = i2c_burst_read(to_data(dev)->bus, to_config(dev)->i2c_addr, start, rval, size)) < 0) {
+	// 	LOG_ERR("Read-after-Write failed for I2C addr %d, Reg %d with value %p of len %d", (int)to_config(dev)->i2c_addr,(int)start, buf, size);
+	// 	return rc;
+	// }
+	// for(size_t i = 0; i < size; i++) {
+	// 	if(rval[i] != buf[i]) {
+	// 		LOG_ERR("At i=%d, read %d after wrote %d", (int) i, (int) rval[i], (int) buf[i]);
+	// 	}
+	// }
 	return 0;
 }
 

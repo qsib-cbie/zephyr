@@ -30,6 +30,7 @@ struct as7341_data {
 	sensor_trigger_handler_t trigger_handler;
 	struct sensor_trigger trigger;
 	uint8_t gpio_pin;
+	bool interrupt_enabled;
 };
 
 struct as7341_config {
@@ -53,6 +54,7 @@ struct as7341_reg_io {
 };
 
 static inline int as7341_setup_interrupt(struct as7341_data* drv_data, bool enable) {
+	drv_data->interrupt_enabled = enable;
 	uint32_t flags = enable ? GPIO_INT_EDGE_TO_ACTIVE : GPIO_INT_DISABLE;
 	return gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin, flags);
 }
