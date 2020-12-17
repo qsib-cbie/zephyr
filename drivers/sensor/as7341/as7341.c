@@ -30,6 +30,12 @@ LOG_MODULE_REGISTER(AS7341, CONFIG_SENSOR_LOG_LEVEL);
 #warning "AS7341 driver enabled without any devices"
 #endif
 
+static inline int as7341_setup_interrupt(struct as7341_data* drv_data, bool enable) {
+	drv_data->interrupt_enabled = enable;
+	uint32_t flags = enable ? GPIO_INT_EDGE_FALLING : GPIO_INT_DISABLE;
+	return gpio_pin_interrupt_configure(drv_data->gpio, drv_data->gpio_pin, flags);
+}
+
 int as7341_attr_set(const struct device *dev,
 		      enum sensor_channel chan,
 		      enum sensor_attribute attr,
@@ -113,19 +119,11 @@ void as7341_work_cb(struct k_work *work)
 		LOG_WRN("Fired work handler without user registered handler");
 	}
 
-	int32_t rc;
-	if((rc = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
-		// LOG_WRN("Interrupt ready again before re-enabling trigger");
-		as7341_handle_cb(data);
-	} else {
-		if(rc < 0) {
-			LOG_ERR("Failed to check interrupt pin with %d", rc);
-		}
-		if(!data->interrupt_enabled) {
-			LOG_DBG("Re-enabling interrupts for trigger");
-			if((rc = as7341_setup_interrupt(data, true)) < 0) {
-				LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
-			}
+	if(!data->interrupt_enabled) {
+		LOG_DBG("Re-enabling interrupts for trigger");
+		int32_t rc;
+		if((rc = as7341_setup_interrupt(data, true)) < 0) {
+			LOG_ERR("Failed to setup interrupt as %d with %d", (int) true, (int) rc);
 		}
 	}
 }
@@ -153,7 +151,11 @@ static void as7341_gpio_callback(const struct device* dev, struct gpio_callback*
 	struct as7341_data *drv_data =
 		CONTAINER_OF(cb, struct as7341_data, gpio_cb);
 
-	as7341_handle_cb(drv_data);
+	if(!drv_data->handling_interrupt) {
+		drv_data->handling_interrupt = true;
+		as7341_handle_cb(drv_data);
+		drv_data->handling_interrupt = false;
+	}
 }
 
 static int as7341_sample_fetch(const struct device* dev, enum sensor_channel chan) {
