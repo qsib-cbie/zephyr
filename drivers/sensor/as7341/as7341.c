@@ -30,6 +30,9 @@ LOG_MODULE_REGISTER(AS7341, CONFIG_SENSOR_LOG_LEVEL);
 #warning "AS7341 driver enabled without any devices"
 #endif
 
+static K_THREAD_STACK_DEFINE(as7341_work_stack, 1024);
+static struct k_work_q as7341_work_q;
+
 static inline int as7341_setup_interrupt(struct as7341_data* drv_data, bool enable) {
 	drv_data->interrupt_enabled = enable;
 	uint32_t flags = enable ? GPIO_INT_EDGE_FALLING : GPIO_INT_DISABLE;
@@ -94,7 +97,7 @@ done:
 	}
 	if ((rc1 = gpio_pin_get(data->gpio, data->gpio_pin)) > 0) {
 		LOG_DBG("Interrupt pin already active, skipping submitting trigger handler work");
-		// k_work_submit(&data->work);
+		// k_work_submit_to_queue(&as7341_work_q, &drv_data->work);
 	} else if(rc1 < 0) {
 		LOG_ERR("Failed to check interrupt pin with %d", rc1);
 		return rc1;
@@ -144,7 +147,7 @@ static void as7341_handle_cb(struct as7341_data* drv_data) {
 		return;
 	}
 	k_work_init(&drv_data->work, as7341_work_cb);
-	k_work_submit(&drv_data->work);
+	k_work_submit_to_queue(&as7341_work_q, &drv_data->work);
 }
 
 static void as7341_gpio_callback(const struct device* dev, struct gpio_callback* cb, uint32_t pins) {
@@ -251,6 +254,8 @@ int as7341_init(const struct device *dev)
 	int rc;
 
 	LOG_DBG("Initializing %s", name);
+	k_work_q_start(&as7341_work_q, as7341_work_stack, K_THREAD_STACK_SIZEOF(as7341_work_stack), 0);
+
 	data->dev = dev;
 
 	data->bus = device_get_binding(config->bus_label);
