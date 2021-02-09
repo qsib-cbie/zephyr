@@ -11,7 +11,6 @@
 #include <device.h>
 #include <sys/util.h>
 #include <kernel.h>
-#
 
 #include <logging/log.h>
 
