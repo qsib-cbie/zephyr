@@ -314,9 +314,9 @@ done:
  */
 
 #define AS7341_DEVICE_INIT(inst)					\
-	DEVICE_AND_API_INIT(as7341_##inst, \
-		DT_INST_LABEL(inst), \
+	DEVICE_DT_INST_DEFINE(inst, \
 		as7341_init, \
+		device_pm_control_nop, \
 		&as7341_data_##inst, \
 		&as7341_config_##inst, \
 		POST_KERNEL, \
