@@ -1,0 +1,7 @@
+# BQ25120A Battery Charger
+
+menuconfig BQ25120A
+	bool "BQ25120A Battery Charger"
+	depends on I2C
+	help
+	  Enable BQ25120A Battery Charger
