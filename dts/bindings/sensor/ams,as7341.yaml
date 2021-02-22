@@ -1,0 +1,13 @@
+description: AS7341 inertial measurement unit
+
+compatible: "ams,as7341"
+
+include: i2c-device.yaml
+
+properties:
+    int-gpios:
+      type: phandle-array
+      required: false
+      description: |
+        This property specifies the connection for INT1, because the
+        Zephyr driver maps all interrupts to INT1.
