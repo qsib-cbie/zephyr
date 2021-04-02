@@ -100,9 +100,13 @@ static void lsm6dsl_thread_cb(const struct device *dev)
 #ifdef CONFIG_LSM6DSL_TRIGGER_OWN_THREAD
 static void lsm6dsl_thread(struct lsm6dsl_data *drv_data)
 {
+	const struct lsm6dsl_config *config = drv_data->dev->config;
 	while (1) {
 		k_sem_take(&drv_data->gpio_sem, K_FOREVER);
 		lsm6dsl_thread_cb(drv_data->dev);
+		if (gpio_pin_get(drv_data->gpio, config->irq_pin) > 0) {
+			handle_irq(drv_data, config->irq_pin);
+		}
 	}
 }
 #endif

@@ -30,7 +30,7 @@ LOG_MODULE_REGISTER(AS7341, CONFIG_SENSOR_LOG_LEVEL);
 #warning "AS7341 driver enabled without any devices"
 #endif
 
-static K_THREAD_STACK_DEFINE(as7341_work_stack, 1024);
+static K_THREAD_STACK_DEFINE(as7341_work_stack, 8192);
 static struct k_work_q as7341_work_q;
 
 static inline int as7341_setup_interrupt(struct as7341_data* drv_data, bool enable) {
@@ -58,7 +58,7 @@ int as7341_trigger_set(const struct device *dev,
 		return rc;
 	}
 	if(trig == NULL || handler == NULL) {
-		LOG_WRN("Disabling interrupts due to NULL argument(s)");
+		LOG_DBG("Disabling interrupts due to NULL argument(s)");
 		return 0;
 	}
 

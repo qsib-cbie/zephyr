@@ -1,0 +1,5 @@
+menuconfig MT29F 
+	bool "MT29F External NAND"
+	depends on SPI
+	help 
+		Provide your own drivers

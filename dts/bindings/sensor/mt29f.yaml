@@ -1,0 +1,5 @@
+description: MT29F External NAND over SPI
+
+compatible: "mt29f"
+
+include: spi-device.yaml
